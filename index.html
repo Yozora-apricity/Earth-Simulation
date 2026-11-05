@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GROUP 2 // 3D Earth, Moon &amp; Satellite Models</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body class="relative select-none">
+
+    <!-- Deep Space Ambient Backdrop -->
+    <div id="space-bg"></div>
+
+    <!-- Three.js WebGL Viewport -->
+    <div id="canvas-container"></div>
+
+    <!-- 3D-to-2D Interactive Part Callout Reticle Overlay (Only shown when a part is clicked) -->
+    <div id="sat-callout-overlay" class="hidden">
+        <svg id="sat-callout-svg" class="w-full h-full">
+            <defs>
+                <linearGradient id="calloutLineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.95"/>
+                    <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.25"/>
+                </linearGradient>
+            </defs>
+            <polyline id="sat-leader-line" fill="none" stroke="url(#calloutLineGrad)" stroke-width="1.5" stroke-dasharray="3 2" points="0,0 0,0 0,0"/>
+            <circle id="sat-leader-dot" cx="0" cy="0" r="4" fill="#38bdf8" stroke="#e0f2fe" stroke-width="1.5"/>
+            <circle id="sat-leader-ring" cx="0" cy="0" r="9" fill="none" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.6"/>
+        </svg>
+        <div id="sat-leader-tag" class="fixed px-2.5 py-1 rounded-md bg-slate-950/90 border border-cyan-400/60 shadow-[0_0_15px_rgba(56,189,248,0.35)] transform -translate-y-1/2">
+            <div class="flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+                <span id="sat-leader-code" class="font-mono-tech text-[8px] text-cyan-300 uppercase">PART ISOLATED</span>
+            </div>
+            <div id="sat-leader-title" class="font-orbitron text-[10px] font-bold text-white tracking-wider">GaAs Triple-Junction Solar Array</div>
+        </div>
+    </div>
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3 sm:py-4 pointer-events-none">
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <button id="btn-logo-home" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/15 hover:border-cyan-400/50 flex items-center justify-center transition-all" title="Reset View">
+                <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M4 7h10l-4 5h10l-4 5H6"/>
+                </svg>
+            </button>
+            <div class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-md bg-black/50 border border-white/10">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="nav-live-mnl" class="font-mono-tech text-[10px] text-cyan-200 tracking-wider">MNL 00:00:00 (UTC+8)</span>
+            </div>
+        </div>
+
+        <nav class="flex items-center gap-4 sm:gap-8 pointer-events-auto bg-black/40 sm:bg-transparent px-3 py-1.5 rounded-xl border border-white/10 sm:border-0">
+            <button data-view="globe" class="nav-link relative py-1 text-[11px] sm:text-xs font-medium tracking-wider text-white hover:text-cyan-300 transition-colors">
+                Earth 3D
+                <span id="nav-ind-globe" class="absolute bottom-0 left-0 right-0 h-[1.5px] bg-cyan-400 transition-all"></span>
+            </button>
+            <button data-view="moon" class="nav-link relative py-1 text-[11px] sm:text-xs font-medium tracking-wider text-white/80 hover:text-cyan-300 transition-colors">
+                Moon 3D
+                <span id="nav-ind-moon" class="absolute bottom-0 left-0 right-0 h-[1.5px] bg-transparent transition-all"></span>
+            </button>
+            <button data-view="satellite" class="nav-link relative py-1 text-[11px] sm:text-xs font-medium tracking-wider text-white/80 hover:text-cyan-300 transition-colors">
+                Spacecraft 3D
+                <span id="nav-ind-satellite" class="absolute bottom-0 left-0 right-0 h-[1.5px] bg-transparent transition-all"></span>
+            </button>
+            <button id="btn-toggle-settings" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/15 flex flex-col items-center justify-center gap-1 transition-all" title="Axial Tilt & Cloud Settings">
+                <span class="w-3.5 h-[1.5px] bg-white"></span>
+                <span class="w-2.5 h-[1.5px] bg-cyan-300"></span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- SETTINGS POPOVER -->
+    <div id="tilt-settings-popover" class="hidden fixed top-14 right-4 sm:right-8 z-40 w-72 hud-glass rounded-xl p-4 pointer-events-auto">
+        <div class="flex items-center justify-between mb-3">
+            <span class="font-orbitron text-[10px] tracking-widest text-cyan-300 uppercase">Globe &amp; Cloud Calibration</span>
+            <button id="btn-close-settings" class="text-white/60 hover:text-white text-xs">✕</button>
+        </div>
+        <div class="space-y-3 text-[10px] font-mono-tech">
+            <div>
+                <div class="flex justify-between text-white/80 mb-1">
+                    <span>AXIAL ROLL (Z)</span>
+                    <span id="lbl-tilt-z" class="text-cyan-300">-6.0°</span>
+                </div>
+                <input id="slider-tilt-z" type="range" min="-25" max="25" step="0.5" value="-6" class="w-full sci-slider">
+            </div>
+            <div>
+                <div class="flex justify-between text-white/80 mb-1">
+                    <span>AXIAL PITCH (X)</span>
+                    <span id="lbl-tilt-x" class="text-cyan-300">+14.0°</span>
+                </div>
+                <input id="slider-tilt-x" type="range" min="-25" max="25" step="0.5" value="14" class="w-full sci-slider">
+            </div>
+            <div>
+                <div class="flex justify-between text-white/80 mb-1">
+                    <span>CLOUD DECK OPACITY</span>
+                    <span id="lbl-cloud-opacity" class="text-cyan-300">94%</span>
+                </div>
+                <input id="slider-cloud-opacity" type="range" min="0" max="1" step="0.02" value="0.94" class="w-full sci-slider">
+            </div>
+            <div>
+                <div class="flex justify-between text-white/80 mb-1">
+                    <span>GOOGLE EARTH WIND SPEED</span>
+                    <span id="lbl-cloud-speed" class="text-cyan-300">1.0×</span>
+                </div>
+                <input id="slider-cloud-speed" type="range" min="0" max="3" step="0.1" value="1.0" class="w-full sci-slider">
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+                <button id="btn-preset-video" class="px-2 py-1.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 hover:bg-cyan-500/30">Video Tilt (-6°)</button>
+                <button id="btn-preset-upright" class="px-2 py-1.5 rounded bg-white/5 text-white/80 border border-white/15 hover:bg-white/10">0° Upright</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================
+         VIEW 1 & 2 HUD: EARTH 3D & MOON 3D
+         =================================================================== -->
+    <section id="hud-globe-view" class="fixed inset-0 z-20 pointer-events-none view-hud-transition">
+        <button id="btn-mobile-hud-toggle" class="sm:hidden fixed top-14 left-4 z-30 pointer-events-auto px-2.5 py-1 rounded-lg hud-glass font-mono-tech text-[9px] text-cyan-300">
+            HUD: MIN
+        </button>
+
+        <!-- Left Architectural Telemetry Column -->
+        <div id="hud-left-collapsible" class="fixed top-20 sm:top-20 left-4 sm:left-8 z-20 w-[290px] sm:w-[340px] space-y-3 pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto sci-scroll pr-1">
+            <!-- Hero Title -->
+            <div class="pl-1">
+                <h1 class="font-orbitron text-2xl sm:text-4xl font-extrabold tracking-[0.20em] text-white uppercase drop-shadow">
+                    GROUP 2
+                </h1>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="w-6 h-[1.5px] bg-cyan-400"></span>
+                    <p id="hero-subtitle-mode" class="font-orbitron text-[9px] sm:text-[10px] tracking-[0.18em] text-cyan-300 uppercase">
+                        IN LOW ORBIT // EARTH &amp; LUNAR
+                    </p>
+                </div>
+                <p class="text-[11px] text-slate-300/85 leading-relaxed mt-1.5">
+                    A 3D Earth, Moon, and satellite models.
+                </p>
+                <div class="flex items-center gap-2 mt-2">
+                    <button id="btn-learn-more-sat" class="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-400/50 font-mono-tech text-[10px] tracking-wider transition-all">
+                        &gt; Inspect Spacecraft 3D
+                    </button>
+                    <button id="btn-focus-moon-quick" class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/85 border border-white/15 font-mono-tech text-[10px] transition-all">
+                        ☾ <span id="lbl-moon-quick-btn">Focus Moon</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CAPITAL TIME // MNL (MANILA, PHILIPPINES) EXCLUSIVE CARD -->
+            <div class="hud-glass rounded-xl p-3.5">
+                <div class="flex items-center justify-between mb-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+                        <span class="font-orbitron text-[10px] tracking-widest text-amber-300 uppercase">CAPITAL TIME // MNL</span>
+                    </div>
+                    <span id="mnl-daynight-badge" class="px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-mono-tech bg-indigo-500/25 text-indigo-200 border border-indigo-400/40">
+                        ☾ NIGHT LIGHTS
+                    </span>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <div>
+                        <div class="text-xs font-semibold text-white">Manila, Philippines</div>
+                        <div class="font-mono-tech text-[9px] text-slate-400">14.5995° N, 120.9842° E</div>
+                    </div>
+                    <div class="text-right">
+                        <div id="mnl-live-clock" class="font-orbitron text-xl sm:text-2xl font-bold text-white tracking-wider">00:00:00</div>
+                        <div id="mnl-live-date" class="font-mono-tech text-[9px] text-cyan-300/90">PHT // UTC+08:00</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 mt-2.5 pt-2 border-t border-white/10">
+                    <button id="btn-fly-mnl" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 font-mono-tech text-[9px] transition-all">
+                        ⌖ Center Manila Night
+                    </button>
+                    <button id="btn-zoom-mnl-surface" class="px-2 py-1 rounded bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-200 border border-cyan-400/35 font-mono-tech text-[9px] transition-all">
+                        ⊕ High-LOD Zoom MNL
+                    </button>
+                </div>
+            </div>
+
+            <!-- SOLAR TERMINATOR & LUNAR ORBIT CONTROLLER -->
+            <div class="hud-glass rounded-xl p-3.5">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-orbitron text-[9px] sm:text-[10px] tracking-widest text-cyan-300 uppercase">Solar &amp; Lunar Ephemeris</span>
+                    <div class="flex items-center gap-1 font-mono-tech text-[9px]">
+                        <button id="btn-solar-lapse" class="px-1.5 py-0.5 rounded bg-white/5 text-white/60 hover:text-white border border-white/10 transition-all">24H LAPSE</button>
+                        <button id="btn-solar-live" class="px-1.5 py-0.5 rounded bg-white/5 text-white/60 hover:text-white border border-white/10 transition-all">LIVE SUN &amp; MOON</button>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <div class="flex justify-between font-mono-tech text-[9px] text-slate-300">
+                        <span>☀ SOLAR TIME: <strong id="solar-subsolar-readout" class="text-white">09:40 UTC</strong></span>
+                        <span>SUBSOLAR: <strong id="solar-lon-readout" class="text-cyan-300">35° E</strong></span>
+                    </div>
+                    <input id="slider-solar-time" type="range" min="0" max="1439" value="580" class="w-full sci-slider">
+                </div>
+
+                <div class="space-y-1 mt-2.5">
+                    <div class="flex justify-between font-mono-tech text-[9px] text-slate-300">
+                        <span>☾ MOON ORBIT ANGLE</span>
+                        <strong id="moon-phase-readout" class="text-cyan-300">135°</strong>
+                    </div>
+                    <input id="slider-moon-orbit" type="range" min="0" max="360" value="135" class="w-full sci-slider">
+                </div>
+
+                <div id="live-sync-status" class="mt-1.5 text-[8px] font-mono-tech text-amber-300/90 flex items-center justify-between">
+                    <span>✎ MANUAL SUN / MOON SCRUBBER</span>
+                    <span id="moon-illum-pct">MOON ILLUM: 78%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT SIDE PROPERLY ALIGNED DRAGGABLE ZOOM RULER SIGN -->
+        <div id="zoom-scroll-sign" class="fixed right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 pointer-events-auto flex flex-col items-center hud-glass rounded-2xl p-2 w-[66px] sm:w-[74px]">
+            <div class="w-full text-center pb-1.5 border-b border-white/10">
+                <div id="zoom-target-badge" class="font-orbitron text-[8px] tracking-widest text-cyan-300 uppercase">EARTH</div>
+                <div class="font-mono-tech text-[7px] text-slate-400">ALTITUDE</div>
+            </div>
+
+            <button id="btn-zoom-step-in" class="w-full py-1 mt-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/35 font-mono-tech text-xs text-cyan-200 font-bold transition-all" title="Zoom In">+</button>
+
+            <div id="zoom-ruler-track" class="relative w-full h-40 sm:h-48 my-1.5 rounded-lg bg-black/50 border border-white/10 cursor-ns-resize flex flex-col justify-between py-2.5 overflow-hidden">
+                <div class="absolute left-[10px] top-2.5 bottom-2.5 w-[1px] bg-cyan-400/25 pointer-events-none"></div>
+
+                <div class="ruler-row pointer-events-none">
+                    <span class="ruler-tick-major"></span>
+                    <span class="font-mono-tech text-[8px] text-cyan-200/80">SURF</span>
+                </div>
+                <div class="ruler-tick-minor pointer-events-none"></div>
+                <div class="ruler-row pointer-events-none">
+                    <span class="ruler-tick-major"></span>
+                    <span class="font-mono-tech text-[8px] text-slate-400">LOW</span>
+                </div>
+                <div class="ruler-tick-minor pointer-events-none"></div>
+                <div class="ruler-row pointer-events-none">
+                    <span class="ruler-tick-major"></span>
+                    <span class="font-mono-tech text-[8px] text-slate-400">MID</span>
+                </div>
+                <div class="ruler-tick-minor pointer-events-none"></div>
+                <div class="ruler-row pointer-events-none">
+                    <span class="ruler-tick-major"></span>
+                    <span class="font-mono-tech text-[8px] text-slate-400">ORB</span>
+                </div>
+                <div class="ruler-tick-minor pointer-events-none"></div>
+                <div class="ruler-row pointer-events-none">
+                    <span class="ruler-tick-major"></span>
+                    <span class="font-mono-tech text-[8px] text-cyan-200/80">DEEP</span>
+                </div>
+
+                <div id="zoom-Drag-thumb" class="absolute left-1 right-1 h-4 -translate-y-1/2 rounded bg-cyan-400/30 border border-cyan-300 shadow-[0_0_10px_rgba(56,189,248,0.65)] flex items-center justify-between px-1.5 pointer-events-none" style="top: 45%;">
+                    <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+                    <span class="w-4 h-[1.5px] bg-cyan-100"></span>
+                </div>
+            </div>
+
+            <button id="btn-zoom-step-out" class="w-full py-1 mb-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/35 font-mono-tech text-xs text-cyan-200 font-bold transition-all" title="Zoom Out">−</button>
+
+            <div class="w-full text-center pt-1 border-t border-white/10">
+                <div id="zoom-alt-km" class="font-orbitron text-[10px] font-bold text-white">5,400</div>
+                <div class="font-mono-tech text-[7px] text-cyan-300/80">KM ALT</div>
+            </div>
+        </div>
+
+        <!-- COLLAPSIBLE BOTTOM CONTROL WIDGET -->
+        <div class="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-none">
+            <div id="bottom-command-window" class="bottom-dock-panel pointer-events-auto hud-glass rounded-2xl p-3 sm:p-3.5 w-[90vw] max-w-[390px]">
+                <div class="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]"></span>
+                        <span class="font-orbitron text-[10px] font-bold tracking-widest text-white uppercase">Orbital Layer Controls</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button id="btn-minimize-bottom-dock" class="w-6 h-6 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all" title="Minimize Window">
+                            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" d="M5 12h14"/>
+                            </svg>
+                        </button>
+                        <button id="btn-close-bottom-dock" class="w-6 h-6 rounded-lg bg-white/5 hover:bg-rose-500/25 border border-white/10 hover:border-rose-400/40 flex items-center justify-center text-white/70 hover:text-rose-200 transition-all" title="Close Controls">
+                            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="btn-toggle-clouds" class="px-2.5 py-2 rounded-xl text-[9px] sm:text-[10px] font-mono-tech border transition-all flex flex-col items-center justify-center gap-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border-cyan-400/40">
+                        <div class="flex items-center gap-1.5">
+                            <span id="cloud-status-dot" class="w-1.5 h-1.5 rounded-full bg-cyan-300 shadow-[0_0_6px_#67e8f9]"></span>
+                            <span class="font-bold">CLOUDS</span>
+                        </div>
+                        <span id="cloud-status-label" class="text-[8px] text-cyan-300/90">ON (LIVE)</span>
+                    </button>
+
+                    <button id="btn-toggle-sats" class="px-2.5 py-2 rounded-xl text-[9px] sm:text-[10px] font-mono-tech border transition-all flex flex-col items-center justify-center gap-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border-cyan-400/40">
+                        <div class="flex items-center gap-1.5">
+                            <span id="sat-status-dot" class="w-1.5 h-1.5 rounded-full bg-cyan-300 shadow-[0_0_6px_#67e8f9]"></span>
+                            <span class="font-bold">ORBITS</span>
+                        </div>
+                        <span id="sat-status-label" class="text-[8px] text-cyan-300/90">SATS: ON</span>
+                    </button>
+
+                    <button id="btn-toggle-spin" class="px-2.5 py-2 rounded-xl text-[9px] sm:text-[10px] font-mono-tech border transition-all flex flex-col items-center justify-center gap-1 bg-emerald-500/20 text-emerald-300 border-emerald-400/40">
+                        <div class="flex items-center gap-1.5">
+                            <span id="spin-status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_#6ee7b7]"></span>
+                            <span class="font-bold">ROTATION</span>
+                        </div>
+                        <span id="spin-status-label" class="text-[8px] text-emerald-200/90">SPIN: ON</span>
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-open-bottom-dock" class="hidden pointer-events-auto mt-1 px-4 py-2.5 rounded-full hud-glass hover:border-cyan-400/60 hover:bg-cyan-950/60 flex items-center gap-2.5 transition-all shadow-lg group" title="Open Orbital Controls">
+                <div class="flex flex-col items-center justify-center gap-[3.5px] w-4">
+                    <span class="w-4 h-[1.5px] bg-cyan-300 group-hover:bg-white rounded-full transition-colors"></span>
+                    <span class="w-4 h-[1.5px] bg-white group-hover:bg-cyan-300 rounded-full transition-colors"></span>
+                    <span class="w-4 h-[1.5px] bg-cyan-300 group-hover:bg-white rounded-full transition-colors"></span>
+                </div>
+                <span class="font-orbitron text-[9px] sm:text-[10px] font-semibold tracking-widest text-white uppercase">Controls</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ===================================================================
+         VIEW 3 HUD: SPACECRAFT 3D CLOSE-UP
+         =================================================================== -->
+    <section id="hud-satellite-view" class="hidden view-hud-hidden fixed inset-0 z-20 pointer-events-none view-hud-transition">
+        <div class="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 rounded-xl hud-glass max-w-[95vw] overflow-x-auto sci-scroll">
+            <button data-sat-type="landsat9" class="sat-type-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg font-orbitron text-[9px] sm:text-[10px] tracking-wider uppercase shrink-0 transition-all border bg-cyan-500/25 text-cyan-300 border-cyan-400/50">
+                01 // LANDSAT 9
+            </button>
+            <button data-sat-type="tdrsm" class="sat-type-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg font-orbitron text-[9px] sm:text-[10px] tracking-wider uppercase shrink-0 transition-all border bg-white/5 text-white/70 hover:text-white border-white/10">
+                02 // TDRS-M RELAY
+            </button>
+            <button data-sat-type="hubble" class="sat-type-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg font-orbitron text-[9px] sm:text-[10px] tracking-wider uppercase shrink-0 transition-all border bg-white/5 text-white/70 hover:text-white border-white/10">
+                03 // HUBBLE HST
+            </button>
+            <button data-sat-type="nisar" class="sat-type-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg font-orbitron text-[9px] sm:text-[10px] tracking-wider uppercase shrink-0 transition-all border bg-white/5 text-white/70 hover:text-white border-white/10">
+                04 // NISAR SAR
+            </button>
+        </div>
+
+        <div class="fixed top-28 sm:top-28 left-4 sm:left-8 z-20 w-[290px] sm:w-[345px] max-h-[calc(100vh-170px)] overflow-y-auto sci-scroll space-y-2.5 pointer-events-auto pr-1">
+            <div class="hud-glass rounded-xl p-3.5">
+                <div id="sat-class-badge" class="font-mono-tech text-[9px] text-cyan-300 tracking-widest uppercase">NASA GSFC / USGS // LEO 705 KM</div>
+                <h2 id="sat-title-name" class="font-orbitron text-base sm:text-lg font-bold text-white tracking-wider mt-0.5">LANDSAT 9 OBSERVATORY</h2>
+                <p id="sat-mission-desc" class="text-[10px] sm:text-[11px] text-slate-300/85 leading-relaxed mt-1"></p>
+
+                <div class="mt-2.5 rounded-lg overflow-hidden border border-cyan-400/25 bg-slate-950/90">
+                    <div id="btn-open-blueprint-viewer" class="relative h-28 sm:h-32 w-full overflow-hidden bg-slate-900 cursor-pointer group" title="Click to open Full-Res Blueprint & Callout Sheet">
+                        <img id="sat-ref-img" src="" alt="Official NASA Spacecraft Reference" class="w-full h-full object-contain bg-[#030919] p-1 group-hover:scale-105 transition-transform duration-300">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none"></div>
+                        <span class="absolute top-1.5 left-2 px-1.5 py-0.5 rounded bg-black/80 border border-cyan-400/40 font-mono-tech text-[8px] text-cyan-200">
+                            MATCHED 3D BLUEPRINT
+                        </span>
+                        <span class="absolute bottom-1.5 right-2 px-2 py-0.5 rounded bg-cyan-500/25 group-hover:bg-cyan-500/45 border border-cyan-400/50 font-mono-tech text-[8px] text-cyan-100 transition-all">
+                            ⤢ View Full Blueprint
+                        </span>
+                    </div>
+                    <div class="px-2.5 py-1.5 border-t border-white/10 flex items-center justify-between gap-2">
+                        <span id="sat-copyright-credit" class="font-mono-tech text-[8px] text-slate-300 leading-tight truncate"></span>
+                        <a id="sat-official-source-link" href="https://science.nasa.gov/mission/landsat-9/" target="_blank" rel="noopener noreferrer" class="shrink-0 font-mono-tech text-[8px] text-cyan-300 hover:text-white underline">
+                            ↗ NASA Portal
+                        </a>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-2.5 border-t border-white/10">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="font-orbitron text-[9px] text-cyan-300 uppercase tracking-wider">Click Part to Separate &amp; Highlight</span>
+                        <span id="sat-isolate-badge" class="font-mono-tech text-[8px] text-slate-400">ASSEMBLED</span>
+                    </div>
+                    <div id="sat-parts-list" class="space-y-1 max-h-40 overflow-y-auto sci-scroll pr-1.5"></div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-1.5 mt-3">
+                    <button id="btn-reset-assembled" class="px-2 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/50 font-mono-tech text-[8px] sm:text-[9px] transition-all">
+                        ⌖ Assembled
+                    </button>
+                    <button id="btn-explode-sat" class="px-2 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 font-mono-tech text-[8px] sm:text-[9px] transition-all">
+                        ⊞ Explode All
+                    </button>
+                    <button id="btn-cycle-sat-angle" class="px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/80 border border-white/15 font-mono-tech text-[8px] sm:text-[9px] transition-all">
+                        ↻ Rotate 60°
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="fixed bottom-16 sm:bottom-20 right-4 sm:right-10 z-20 w-[265px] sm:w-[310px] space-y-3 pointer-events-auto text-right">
+            <div class="hud-glass rounded-xl p-3.5 text-left">
+                <div class="flex items-center justify-between">
+                    <span id="part-header-label" class="font-mono-tech text-[9px] text-cyan-300 uppercase">Spacecraft Assembly Status</span>
+                    <span id="part-status-tag" class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono-tech text-[8px]">FULL ASSEMBLY</span>
+                </div>
+                <div id="part-selected-name" class="font-orbitron text-xs font-bold text-white mt-1">All Subsystems Integrated</div>
+                <p id="part-selected-spec" class="text-[10px] text-slate-300/85 mt-1 leading-relaxed"></p>
+                <button id="btn-sat-back-globe" class="mt-2.5 w-full py-1.5 rounded-lg bg-white/10 hover:bg-cyan-500/25 text-white hover:text-cyan-200 border border-white/15 font-mono-tech text-[10px] transition-all">
+                    &lt; Return to Earth 3D Globe
+                </button>
+            </div>
+
+            <div class="pr-1">
+                <div id="sat-orbit-regime-lbl" class="font-mono-tech text-[9px] text-cyan-300 tracking-widest uppercase">SUN-SYNCHRONOUS LEO</div>
+                <div class="flex items-baseline justify-end gap-2">
+                    <span id="sat-km-readout" class="font-orbitron text-4xl sm:text-6xl font-extrabold text-white tracking-wider">705</span>
+                    <span class="font-orbitron text-xs text-cyan-300">KM</span>
+                </div>
+                <div class="font-mono-tech text-[9px] text-slate-400">INCLINATION: <strong id="sat-center-deg" class="text-white">98°</strong></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================================
+         PERSISTENT BOTTOM-LEFT COPYRIGHT BADGE (© Gerald Rogado) & REFERENCES
+         =================================================================== -->
+    <div class="fixed bottom-3 left-3 sm:bottom-5 sm:left-6 z-40 flex items-center gap-2.5 pointer-events-auto">
+        <div class="px-3 py-1.5 rounded-xl hud-glass border border-white/15 flex items-center gap-1.5 shadow-lg">
+            <span class="text-cyan-300 font-mono-tech text-xs font-bold">©</span>
+            <span class="font-mono-tech text-[10px] sm:text-[11px] text-slate-200 tracking-wider font-medium">Gerald Rogado</span>
+        </div>
+
+        <div id="apa-ref-container" class="hidden">
+            <button id="btn-open-apa-refs" class="px-3.5 py-1.5 rounded-xl hud-glass hover:border-cyan-400/60 flex items-center gap-2 transition-all group">
+                <svg class="w-3.5 h-3.5 text-cyan-300 group-hover:text-white transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+                <span class="font-orbitron text-[10px] font-semibold text-cyan-200 group-hover:text-white tracking-wider uppercase">References</span>
+            </button>
+
+            <div id="apa-reference-modal" class="hidden fixed bottom-14 left-3 sm:left-6 z-50 w-[92vw] sm:w-[480px] max-h-[72vh] overflow-y-auto sci-scroll hud-glass rounded-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                    <div>
+                        <div class="font-orbitron text-xs font-bold text-cyan-300 tracking-wider uppercase">References &amp; 3D Model Credits</div>
+                        <div class="font-mono-tech text-[9px] text-slate-400">Official NASA 3D Resources, Caltech JPL &amp; Smithsonian NASM</div>
+                    </div>
+                    <button id="btn-close-apa-refs" class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs">✕</button>
+                </div>
+
+                <div class="space-y-2.5 text-[10px] leading-relaxed text-slate-200">
+                    <!-- Landsat 9 -->
+                    <div class="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <img id="apa-thumb-landsat9" data-blueprint-type="landsat9" src="" alt="Landsat 9" class="btn-apa-blueprint w-20 h-12 rounded object-contain bg-[#030919] border border-cyan-400/30 hover:border-cyan-300 cursor-pointer shrink-0">
+                            <div class="font-mono-tech text-[8px] text-cyan-300">
+                                <div>MODEL &amp; BLUEPRINT OWNER: NASA Goddard Space Flight Center / USGS</div>
+                                <div class="text-slate-400">License: Public Domain (17 U.S.C. § 105) // NP-2021-07-028-GSFC</div>
+                            </div>
+                        </div>
+                        <p class="pl-4 -indent-4">
+                            National Aeronautics and Space Administration, Goddard Space Flight Center. (2021). <em>Landsat 9 mission overview: Continuing the legacy of Earth observation</em> (NP-2021-07-028-GSFC). NASA Science Mission Directorate. https://science.nasa.gov/mission/landsat-9/
+                        </p>
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-3">
+                                <a href="https://science.nasa.gov/mission/landsat-9/" target="_blank" rel="noopener noreferrer" class="font-mono-tech text-[9px] text-cyan-300 hover:underline">↗ Official NASA Science Page</a>
+                                <button data-blueprint-type="landsat9" class="btn-apa-blueprint font-mono-tech text-[9px] text-emerald-300 hover:underline">⤢ View Blueprint</button>
+                            </div>
+                            <button data-inspect-type="landsat9" class="btn-apa-inspect px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 font-mono-tech text-[8px]">Inspect 3D</button>
+                        </div>
+                    </div>
+
+                    <!-- TDRS-M -->
+                    <div class="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <img id="apa-thumb-tdrsm" data-blueprint-type="tdrsm" src="" alt="TDRS-M" class="btn-apa-blueprint w-20 h-12 rounded object-contain bg-[#030919] border border-cyan-400/30 hover:border-cyan-300 cursor-pointer shrink-0">
+                            <div class="font-mono-tech text-[8px] text-cyan-300">
+                                <div>MODEL &amp; BLUEPRINT OWNER: NASA Goddard Space Flight Center / SCaN</div>
+                                <div class="text-slate-400">License: NASA Media Usage Guidelines // NP-2017-04-GSFC</div>
+                            </div>
+                        </div>
+                        <p class="pl-4 -indent-4">
+                            National Aeronautics and Space Administration, Space Communications and Navigation (SCaN). (2022). <em>Tracking and Data Relay Satellite (TDRS) generations of spacecraft fact sheet</em>. NASA Official Publications. https://www.nasa.gov/missions/tdrs/tracking-and-data-relay-satellite-tdrs-generations-of-spacecraft/
+                        </p>
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-3">
+                                <a href="https://www.nasa.gov/missions/tdrs/tracking-and-data-relay-satellite-tdrs-generations-of-spacecraft/" target="_blank" rel="noopener noreferrer" class="font-mono-tech text-[9px] text-cyan-300 hover:underline">↗ Official NASA TDRS Page</a>
+                                <button data-blueprint-type="tdrsm" class="btn-apa-blueprint font-mono-tech text-[9px] text-emerald-300 hover:underline">⤢ Blueprint</button>
+                            </div>
+                            <button data-inspect-type="tdrsm" class="btn-apa-inspect px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 font-mono-tech text-[8px]">Inspect 3D</button>
+                        </div>
+                    </div>
+
+                    <!-- Hubble Space Telescope -->
+                    <div class="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <img id="apa-thumb-hubble" data-blueprint-type="hubble" src="" alt="Hubble HST" class="btn-apa-blueprint w-20 h-12 rounded object-contain bg-[#030919] border border-cyan-400/30 hover:border-cyan-300 cursor-pointer shrink-0">
+                            <div class="font-mono-tech text-[8px] text-cyan-300">
+                                <div>MODEL &amp; BLUEPRINT OWNER: NASA / ESA / Smithsonian NASM</div>
+                                <div class="text-slate-400">License: Smithsonian CC0 / NASA Public Domain Archive (A19870194000)</div>
+                            </div>
+                        </div>
+                        <p class="pl-4 -indent-4">
+                            National Aeronautics and Space Administration &amp; Smithsonian National Air and Space Museum. (2023). <em>Hubble Space Telescope observatory architecture and optical assembly archival record</em>. NASA Science. https://science.nasa.gov/mission/hubble/
+                        </p>
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-3">
+                                <a href="https://science.nasa.gov/mission/hubble/" target="_blank" rel="noopener noreferrer" class="font-mono-tech text-[9px] text-cyan-300 hover:underline">↗ NASA Hubble Portal</a>
+                                <button data-blueprint-type="hubble" class="btn-apa-blueprint font-mono-tech text-[9px] text-emerald-300 hover:underline">⤢ Blueprint</button>
+                            </div>
+                            <button data-inspect-type="hubble" class="btn-apa-inspect px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 font-mono-tech text-[8px]">Inspect 3D</button>
+                        </div>
+                    </div>
+
+                    <!-- NISAR -->
+                    <div class="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <img id="apa-thumb-nisar" data-blueprint-type="nisar" src="" alt="NISAR SAR" class="btn-apa-blueprint w-20 h-12 rounded object-contain bg-[#030919] border border-cyan-400/30 hover:border-cyan-300 cursor-pointer shrink-0">
+                            <div class="font-mono-tech text-[8px] text-cyan-300">
+                                <div>MODEL &amp; BLUEPRINT OWNER: NASA / Caltech JPL / ISRO</div>
+                                <div class="text-slate-400">License: JPL Public Domain Image Policy (PIA24575)</div>
+                            </div>
+                        </div>
+                        <p class="pl-4 -indent-4">
+                            Jet Propulsion Laboratory, California Institute of Technology, &amp; National Aeronautics and Space Administration. (2025). <em>NASA-ISRO Synthetic Aperture Radar (NISAR) mission overview and engineering handbook</em>. NASA Science. https://science.nasa.gov/mission/nisar/
+                        </p>
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-3">
+                                <a href="https://science.nasa.gov/mission/nisar/" target="_blank" rel="noopener noreferrer" class="font-mono-tech text-[9px] text-cyan-300 hover:underline">↗ Official NASA NISAR Page</a>
+                                <button data-blueprint-type="nisar" class="btn-apa-blueprint font-mono-tech text-[9px] text-emerald-300 hover:underline">⤢ View Blueprint</button>
+                            </div>
+                            <button data-inspect-type="nisar" class="btn-apa-inspect px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-400/40 font-mono-tech text-[8px]">Inspect 3D</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================
+         FULL-RESOLUTION ENGINEERING BLUEPRINT LIGHTBOX MODAL
+         =================================================================== -->
+    <div id="blueprint-lightbox-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 pointer-events-auto">
+        <div class="hud-glass rounded-2xl max-w-4xl w-full overflow-hidden border border-cyan-400/40 shadow-[0_0_50px_rgba(56,189,248,0.25)]">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/80">
+                <div>
+                    <div id="bp-modal-subtitle" class="font-mono-tech text-[9px] text-cyan-300 uppercase tracking-widest">NASA ENGINEERING BLUEPRINT // MATCHED TO 3D MODEL</div>
+                    <h3 id="bp-modal-title" class="font-orbitron text-xs sm:text-sm font-bold text-white tracking-wider">LANDSAT 9 OBSERVATORY — DIMENSIONED SCHEMATIC</h3>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a id="bp-modal-download" href="#" download="nasa-spacecraft-blueprint.png" class="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-400/50 font-mono-tech text-[9px] transition-all">
+                        ⬇ Download Blueprint PNG
+                    </a>
+                    <a id="bp-modal-ext-link" href="https://science.nasa.gov/mission/landsat-9/" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/15 font-mono-tech text-[9px] transition-all">
+                        ↗ Official NASA Mission Page
+                    </a>
+                    <button id="btn-close-blueprint-modal" class="w-7 h-7 rounded-lg bg-white/10 hover:bg-rose-500/30 text-white text-xs flex items-center justify-center">✕</button>
+                </div>
+            </div>
+            <div class="p-3 sm:p-5 bg-[#020714] flex flex-col items-center">
+                <img id="bp-modal-img" src="" alt="Full Resolution Spacecraft Blueprint" class="w-full max-h-[65vh] object-contain rounded-lg border border-cyan-500/20">
+                <div id="bp-modal-citation" class="mt-3 w-full text-left font-mono-tech text-[9px] text-slate-300 bg-white/5 px-3 py-2 rounded-lg border border-white/10 leading-relaxed"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>
